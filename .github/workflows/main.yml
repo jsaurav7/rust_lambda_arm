@@ -1,4 +1,4 @@
-name: Build Rust Lambda (x86_64 + arm64)
+name: Build Rust Lambda
 
 on:
   push:
@@ -6,18 +6,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  build-arm64:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: x86_64-unknown-linux-gnu
-            arch: x86_64
-            zip: lambda-x86_64.zip
-          - target: aarch64-unknown-linux-gnu
-            arch: arm64
-            zip: lambda-arm64.zip
 
     steps:
       - name: Checkout
@@ -30,50 +20,47 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-arm64-${{ hashFiles('**/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-cargo-${{ matrix.target }}-
+            ${{ runner.os }}-cargo-arm64-
 
-      - name: Install cross toolchain (only for ARM target)
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
+      - name: Install cross toolchain
         run: |
           sudo apt-get update
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
-      - name: Install Rust and add target
+      - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
           override: true
 
-      - name: Add Rust target
-        run: rustup target add ${{ matrix.target }}
+      - name: Add ARM64 target
+        run: rustup target add aarch64-unknown-linux-gnu
 
       - name: Ensure cargo knows the cross-linker
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           mkdir -p .cargo
           echo "[target.aarch64-unknown-linux-gnu]" > .cargo/config.toml
           echo 'linker = "aarch64-linux-gnu-gcc"' >> .cargo/config.toml
 
-
-      - name: Build release (cross-compile)
+      - name: Build release (ARM64)
         run: |
-          # change `compress` to your binary name if different
-          cargo build --release --target ${{ matrix.target }} --bin compress
+          # change `compress` to your binary name
+          cargo build --release --target aarch64-unknown-linux-gnu --bin compress
 
       - name: Package into lambda zip
         run: |
-          BINARY=compress   # change if your binary name differs
+          BINARY=compress
           OUT=out
           rm -rf $OUT && mkdir -p $OUT
-          cp target/${{ matrix.target }}/release/$BINARY $OUT/bootstrap
+          cp target/aarch64-unknown-linux-gnu/release/$BINARY $OUT/bootstrap
           chmod +x $OUT/bootstrap
-          (cd $OUT && zip -r ../${{ matrix.zip }} bootstrap)
-          ls -lh ${{ matrix.zip }}
+          cd $OUT && zip ../lambda-arm64.zip bootstrap
+    
 
       - name: Upload built zip as artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.zip }}
-          path: ${{ matrix.zip }}
+          name: lambda-arm64.zip
+          path: lambda-arm64.zip
