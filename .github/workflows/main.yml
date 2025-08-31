@@ -1,0 +1,80 @@
+name: Build Rust Lambda (x86_64 + arm64)
+
+on:
+  push:
+    branches: [ master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: x86_64
+            zip: lambda-x86_64.zip
+          - target: aarch64-unknown-linux-gnu
+            arch: arm64
+            zip: lambda-arm64.zip
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache cargo registry & target
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-${{ matrix.target }}-
+
+      - name: Install cross toolchain (only for ARM target)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          # installs cross-linker for aarch64 (glibc target)
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+
+      - name: Install Rust and add target
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          override: true
+          targets: ${{ matrix.target }}
+
+      - name: Ensure cargo knows the cross-linker (only for ARM)
+        run: |
+          mkdir -p .cargo
+          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
+            cat > .cargo/config.toml <<'EOF'
+[target.aarch64-unknown-linux-gnu]
+linker = "aarch64-linux-gnu-gcc"
+EOF
+          fi
+
+      - name: Build release (cross-compile)
+        run: |
+          # replace `compress` with your binary name (or use --bin dynamic)
+          cargo build --release --target ${{ matrix.target }} --bin compress
+
+      - name: Package into lambda zip
+        run: |
+          BINARY=compress   # <<-- change if your binary name differs
+          OUT=out
+          rm -rf $OUT && mkdir -p $OUT
+          cp target/${{ matrix.target }}/release/$BINARY $OUT/bootstrap
+          chmod +x $OUT/bootstrap
+          (cd $OUT && zip -r ../${{ matrix.zip }} bootstrap)
+          ls -lh ${{ matrix.zip }}
+
+      - name: Upload built zip as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.zip }}
+          path: ${{ matrix.zip }}
