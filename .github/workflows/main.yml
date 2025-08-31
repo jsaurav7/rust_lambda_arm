@@ -38,7 +38,6 @@ jobs:
         if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           sudo apt-get update
-          # installs cross-linker for aarch64 (glibc target)
           sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
 
       - name: Install Rust and add target
@@ -48,24 +47,21 @@ jobs:
           override: true
           targets: ${{ matrix.target }}
 
-      - name: Ensure cargo knows the cross-linker (only for ARM)
+      - name: Ensure cargo knows the cross-linker
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
         run: |
           mkdir -p .cargo
-          if [ "${{ matrix.target }}" = "aarch64-unknown-linux-gnu" ]; then
-            cat > .cargo/config.toml <<'EOF'
-[target.aarch64-unknown-linux-gnu]
-linker = "aarch64-linux-gnu-gcc"
-EOF
-          fi
+          echo "[target.aarch64-unknown-linux-gnu]" > .cargo/config.toml
+          echo 'linker = "aarch64-linux-gnu-gcc"' >> .cargo/config.toml
 
       - name: Build release (cross-compile)
         run: |
-          # replace `compress` with your binary name (or use --bin dynamic)
+          # change `compress` to your binary name if different
           cargo build --release --target ${{ matrix.target }} --bin compress
 
       - name: Package into lambda zip
         run: |
-          BINARY=compress   # <<-- change if your binary name differs
+          BINARY=compress   # change if your binary name differs
           OUT=out
           rm -rf $OUT && mkdir -p $OUT
           cp target/${{ matrix.target }}/release/$BINARY $OUT/bootstrap
