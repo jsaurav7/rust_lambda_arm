@@ -59,8 +59,8 @@ jobs:
           cd $OUT && zip ../lambda-arm64.zip bootstrap
     
 
-      - name: Upload built zip as artifact
+      - name: Upload artifact (bootstrap only)
         uses: actions/upload-artifact@v4
         with:
-          name: lambda-arm64.zip
-          path: lambda-arm64.zip
+          name: lambda-bootstrap
+          path: out/
